@@ -1,7 +1,20 @@
 using CSV, DataFrames, HTTP, URIs, JSON, Distances, OpenAI, LinearAlgebra, DotEnv
 DotEnv.config()
 
-api_key = ENV["OPENAI_API_KEY"]
+
+function load_embeddings(embeddingByChapterCSV, embeddingByVerseNTCSV)
+    embeddingsByChapter = DataFrame(CSV.File(embeddingByChapterCSV))
+    embeddingsByVerseNT = DataFrame(CSV.File(embeddingByVerseNTCSV))
+
+    embeddingsByChapter.embedding = Vector{Float64}.(JSON.parse.(embeddingsByChapter.embedding))
+    embeddingsByChapter.location = [embeddingsByChapter.Book[i] * " " * string(embeddingsByChapter.Chapter[i]) for i in 1:length(embeddingsByChapter.Book)]
+    embeddingsByChapter.verse = [embeddingsByChapter.Verses[i] for i in 1:length(embeddingsByChapter.Book)]
+
+    embeddingsByVerseNT.embedding = Vector{Float64}.(JSON.parse.(embeddingsByVerseNT.embedding))
+
+
+    return embeddingsByChapter, embeddingsByVerseNT
+end
 
 function find_similarities(api_key, num_search_terms, query_params, embeddingsDF)
     search_term = query_params["query"]
@@ -21,40 +34,20 @@ function find_similarities(api_key, num_search_terms, query_params, embeddingsDF
     return sort(embeddingsDF, :similarities, rev=true)[1:5, Not([:embedding, :Column1])]
 end
 
-function load_embeddings(embeddingByChapterCSV, embeddingByVerseNTCSV)
-    embeddingsByChapter = CSV.read(embeddingByChapterCSV, DataFrame)
-    embeddingsByChapter.embedding = [Vector{Float64}(JSON.parse(x)) for x in embeddingsByChapter.embedding]
-    embeddingsByChapter.location = [embeddingsByChapter.Book[i] * " " * string(embeddingsByChapter.Chapter[i]) for i in 1:length(embeddingsByChapter.Book)]
-    embeddingsByChapter.verse = [embeddingsByChapter.Verses[i] for i in 1:length(embeddingsByChapter.Book)]
-
-    embeddingsByVerseNT = CSV.read(embeddingByVerseNTCSV, DataFrame)
-    embeddingsByVerseNT.embedding = [Vector{Float64}(JSON.parse(x)) for x in embeddingsByVerseNT.embedding]
-    return embeddingsByChapter, embeddingsByVerseNT
-end
 
 function cosine_similarity(a, b)
     return dot(a, b) / (norm(a) * norm(b))
 end
 
-# Define a function to handle incoming HTTP requests
-function server(req)
-    # Extract the request URI
+
+# Handle the /add endpoint
+
+function search(req::HTTP.Request)
     uri = req.target
     parsed_uri = URIs.URI(uri)
+    query_params = URIs.queryparams(parsed_uri.query)
 
-    # Set the OpenAI API key
-    embeddingsByChapter, embeddingsByVerseNT = load_embeddings("embeddings/chapter/KJV_Bible_Embeddings_by_Chapter.csv", "embeddings/verse/nt/KJV_NT_Bible_Embeddings_by_Verse.csv")
-
-    # Handle the /hello endpoint
-    if uri == "/hello"
-        # Respond with a greeting
-        return HTTP.Response(200, "Hello, welcome to the API!")
-    end
-
-    # Handle the /add endpoint
-    if startswith(parsed_uri.path, "/search")
-        query_params = URIs.queryparams(parsed_uri.query)
-
+    try
         # Check if the required query parameters are present
         if haskey(query_params, "search_by") && haskey(query_params, "query")
             # Parse the query parameters as integers
@@ -75,11 +68,20 @@ function server(req)
 
         # Convert the found data to a JSON payload and return it
         return HTTP.Response(200, JSON.json(json_array))
+    catch e
+        return HTTP.Response(404, "Not Found")
+    finally
+        println("Request completed")
     end
-
-    # Respond with a 404 Not Found status for unrecognized endpoints
-    return HTTP.Response(404, "Not Found")
 end
 
+
+api_key = ENV["OPENAI_API_KEY"]
+embeddingsByChapter, embeddingsByVerseNT = load_embeddings("embeddings/chapter/KJV_Bible_Embeddings_by_Chapter.csv", "embeddings/verse/nt/KJV_NT_Bible_Embeddings_by_Verse.csv")
+
+router = HTTP.Handlers.Router()
+
+HTTP.register!(router, "GET", "/search", search)
+
 # Start the HTTP server on port 8080
-HTTP.serve(server, host="127.0.0.1", port=8080)
+HTTP.serve(router, host="127.0.0.1", port=8080)
