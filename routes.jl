@@ -31,7 +31,7 @@ function find_similarities(api_key, num_search_terms, query_params, embeddingsDF
     end
 
     # Sort and get the top 5 results
-    return sort(embeddingsDF, :similarities, rev=true)[1:5, Not([:embedding, :Column1])]
+    return sort(embeddingsDF, :similarities, rev=true)[1:50, Not([:embedding, :Column1])]
 end
 
 
