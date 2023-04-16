@@ -77,7 +77,7 @@ end
 
 
 api_key = ENV["OPENAI_API_KEY"]
-embeddingsByChapter, embeddingsByVerseNT = load_embeddings("embeddings/chapter/KJV_Bible_Embeddings_by_Chapter.csv", "embeddings/verse/nt/KJV_NT_Bible_Embeddings_by_Verse.csv")
+embeddingsByChapter, embeddingsByVerseNT = load_embeddings("embeddings/chapter/KJV_Bible_Embeddings_by_Chapter.csv", "embeddings/verse/KJV_Bible_Embeddings.csv")
 
 router = HTTP.Handlers.Router()
 
