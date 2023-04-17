@@ -30,7 +30,7 @@ function find_similarities(api_key, num_search_terms, query_params, embeddingsDF
     end
 
     # Sort and get the top 5 results
-    return sort(embeddingsDF, :similarities, rev=true)[1:50, Not([:embedding, :Column1])]
+    return sort!(embeddingsDF, :similarities, rev=true)[1:50, Not([:embedding])]
 end
 
 
@@ -45,6 +45,7 @@ function search(req::HTTP.Request)
     uri = req.target
     parsed_uri = URIs.URI(uri)
     query_params = URIs.queryparams(parsed_uri.query)
+    println(uri)
 
     try
         # Check if the required query parameters are present
@@ -68,7 +69,8 @@ function search(req::HTTP.Request)
         # Convert the found data to a JSON payload and return it
         return HTTP.Response(200, JSON.json(json_array))
     catch e
-        return HTTP.Response(404, "Not Found")
+        println(e)
+        return HTTP.Response(404, "Not Found: $e")
     finally
         println("Request completed")
     end
@@ -89,4 +91,4 @@ router = HTTP.Handlers.Router()
 @rate_limit limiter 1 HTTP.register!(router, "GET", "/search", search)
 
 # Start the HTTP server on port 8080
-HTTP.serve(router, host="127.0.0.1", port=8080)
+HTTP.serve(router, host="0.0.0.0", port=8081)
