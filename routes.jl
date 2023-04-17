@@ -1,6 +1,5 @@
-using CSV, DataFrames, HTTP, URIs, JSON, Distances, OpenAI, LinearAlgebra, DotEnv
+using CSV, DataFrames, HTTP, URIs, JSON, Distances, OpenAI, LinearAlgebra, DotEnv, RateLimiter
 DotEnv.config()
-
 
 function load_embeddings(embeddingByChapterCSV, embeddingByVerseNTCSV)
     embeddingsByChapter = DataFrame(CSV.File(embeddingByChapterCSV))
@@ -76,12 +75,18 @@ function search(req::HTTP.Request)
 end
 
 
+tokens_per_second = 2
+max_tokens = 100
+initial_tokens = 0
+
+limiter = TokenBucketRateLimiter(tokens_per_second, max_tokens, initial_tokens)
+
 api_key = ENV["OPENAI_API_KEY"]
 embeddingsByChapter, embeddingsByVerseNT = load_embeddings("embeddings/chapter/KJV_Bible_Embeddings_by_Chapter.csv", "embeddings/verse/KJV_Bible_Embeddings.csv")
 
 router = HTTP.Handlers.Router()
 
-HTTP.register!(router, "GET", "/search", search)
+@rate_limit limiter 1 HTTP.register!(router, "GET", "/search", search)
 
 # Start the HTTP server on port 8080
 HTTP.serve(router, host="127.0.0.1", port=8080)
