@@ -73,4 +73,7 @@ route("/", index, method=GET)
 route("/search", search, method=GET)
 
 # Start the Genie server
-up(port=8080)
+up(port=8080, host="0.0.0.0")
+
+# Keep the server running indefinitely
+wait(Channel(Inf))
