@@ -1,18 +1,18 @@
 using CSV, DataFrames, HTTP, URIs, JSON, Distances, OpenAI, LinearAlgebra, DotEnv, RateLimiter
 DotEnv.config()
 
-function load_embeddings(embeddingByChapterCSV, embeddingByVerseNTCSV)
+function load_embeddings(embeddingByChapterCSV, embeddingByVerseCSV)
     embeddingsByChapter = DataFrame(CSV.File(embeddingByChapterCSV))
-    embeddingsByVerseNT = DataFrame(CSV.File(embeddingByVerseNTCSV))
+    embeddingsByVerse = DataFrame(CSV.File(embeddingByVerseCSV))
 
     embeddingsByChapter.embedding = Vector{Float64}.(JSON.parse.(embeddingsByChapter.embedding))
     embeddingsByChapter.location = [embeddingsByChapter.Book[i] * " " * string(embeddingsByChapter.Chapter[i]) for i in 1:length(embeddingsByChapter.Book)]
     embeddingsByChapter.verse = [embeddingsByChapter.Verses[i] for i in 1:length(embeddingsByChapter.Book)]
 
-    embeddingsByVerseNT.embedding = Vector{Float64}.(JSON.parse.(embeddingsByVerseNT.embedding))
+    embeddingsByVerse.embedding = Vector{Float64}.(JSON.parse.(embeddingsByVerse.embedding))
 
 
-    return embeddingsByChapter, embeddingsByVerseNT
+    return embeddingsByChapter, embeddingsByVerse
 end
 
 function find_similarities(api_key, num_search_terms, query_params, embeddingsDF)
@@ -40,8 +40,14 @@ end
 
 
 # Handle the /add endpoint
+function index(req::HTTP.Request)
+    printlnt("Index: $(req.target)")
+    return HTTP.Response(200, JSON.json(Dict("message" => "Hello World")))
+end
 
 function search(req::HTTP.Request)
+    printlnt("Search: $(req.target)")
+
     uri = req.target
     parsed_uri = URIs.URI(uri)
     query_params = URIs.queryparams(parsed_uri.query)
@@ -52,7 +58,7 @@ function search(req::HTTP.Request)
         if haskey(query_params, "search_by") && haskey(query_params, "query")
             # Parse the query parameters as integers
             search_terms = haskey(query_params, "query_2") ? 2 : 1
-            embeddingsDF = query_params["search_by"] == "chapter" ? embeddingsByChapter : embeddingsByVerseNT
+            embeddingsDF = query_params["search_by"] == "chapter" ? embeddingsByChapter : embeddingsByVerse
         else
             # Respond with an error message if the query parameters are missing
             return HTTP.Response(400, "Missing query parameters 'search_by' and 'query'")
@@ -84,10 +90,11 @@ initial_tokens = 0
 limiter = TokenBucketRateLimiter(tokens_per_second, max_tokens, initial_tokens)
 
 api_key = ENV["OPENAI_API_KEY"]
-embeddingsByChapter, embeddingsByVerseNT = load_embeddings("embeddings/chapter/KJV_Bible_Embeddings_by_Chapter.csv", "embeddings/verse/KJV_Bible_Embeddings.csv")
+embeddingsByChapter, embeddingsByVerse = load_embeddings("embeddings/chapter/KJV_Bible_Embeddings_by_Chapter.csv", "embeddings/verse/KJV_Bible_Embeddings.csv")
 
 router = HTTP.Handlers.Router()
 
+@rate_limit limiter 1 HTTP.register!(router, "GET", "/", index)
 @rate_limit limiter 1 HTTP.register!(router, "GET", "/search", search)
 
 # Start the HTTP server on port 8080

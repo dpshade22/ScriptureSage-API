@@ -1,6 +1,9 @@
 .env
 .DS_Store
+venv
+.venv
 
 frontend/
 embeddings/
 Dockerfile
+.vscode/settings.json
