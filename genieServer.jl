@@ -1,5 +1,5 @@
 using Genie, Genie.Router, Genie.Requests, Genie.Responses
-using CSV, DataFrames, JSON, Distances, OpenAI, LinearAlgebra, DotEnv
+using CSV, DataFrames, JSON, Distances, OpenAI, LinearAlgebra, DotEnv, Revise
 
 DotEnv.config()
 
@@ -35,17 +35,19 @@ function index()
 end
 
 function search()
-    search_by = params(:search_by)
-    query = params(:query)
+    println(params())
+    if haskey(params(), :search_by) && haskey(params(), :query)
+        search_by = params(:search_by)
+        query = params(:query)
+    else
+        return json(Dict("error" => "Missing query parameters 'search_by' and 'query'"))
+    end
+
     println(query)
     println(search_by)
     try
-        if !isempty(search_by) && !isempty(query)
-            embeddingsDF = (search_by == "verse") ? embeddingsByVerse : embeddingsByChapter
-        else
-            return json(400, Dict("error" => "Missing query parameters 'search_by' and 'query'"))
-        end
         println("Trying to find similarities")
+        embeddingsDF = search_by == "chapter" ? embeddingsByChapter : embeddingsByVerse
 
         foundDF = find_similarities(api_key, query, embeddingsDF)
         println(foundDF)
@@ -64,16 +66,15 @@ function search()
     end
 end
 
-
 api_key = ENV["OPENAI_API_KEY"]
 embeddingsByChapter, embeddingsByVerse = load_embeddings("embeddings/chapter/KJV_Bible_Embeddings_by_Chapter.csv", "embeddings/verse/KJV_Bible_Embeddings.csv")
 
-# Route registration
-route("/", index, method=GET)
-route("/search", search, method=GET)
+function app()
 
-# Start the Genie server
-up(port=8080, host="0.0.0.0")
 
-# Keep the server running indefinitely
-wait(Channel(Inf))
+    # Route registration
+    route("/", index, method=GET)
+    route("/search", search, method=GET)
+
+    up(port=8000, host="0.0.0.0")
+end
